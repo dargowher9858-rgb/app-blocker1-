@@ -8,15 +8,19 @@ class BlockerService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
             val packageName = event.packageName?.toString() ?: return
-            
-            // Safety measure: Do not block the blocker app itself
-            if (packageName == "com.myblocker.app") return
+
+            // Hardcoded safety bypass: Never block our own app or Android Settings
+            if (packageName == "com.myblocker.app" || packageName == "com.android.settings") return
 
             val prefs = getSharedPreferences("block_prefs", Context.MODE_PRIVATE)
-            val blockedApps = prefs.getStringSet("blocked_apps", setOf()) ?: setOf()
             
+            // Check if the Master ON/OFF Switch is turned on
+            val isEnabled = prefs.getBoolean("is_enabled", true)
+            if (!isEnabled) return
+
+            val blockedApps = prefs.getStringSet("blocked_apps", emptySet()) ?: emptySet()
+
             if (blockedApps.contains(packageName)) {
-                // Immediately kick the user back to the home screen
                 performGlobalAction(GLOBAL_ACTION_HOME)
             }
         }
