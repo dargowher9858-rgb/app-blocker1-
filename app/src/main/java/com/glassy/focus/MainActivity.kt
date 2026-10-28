@@ -5,9 +5,12 @@ import android.content.Intent
 import android.graphics.Color
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.PowerManager
 import android.provider.Settings
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
@@ -48,13 +51,12 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Only checks state when you open the app, no crazy loops!
         checkStateAndRender()
     }
 
     private fun checkStateAndRender() {
-        handler.removeCallbacksAndMessages(null) // Kill any old loops
-        contentLayout.removeAllViews() // Clear the canvas once
+        handler.removeCallbacksAndMessages(null)
+        contentLayout.removeAllViews()
         
         val prefs = getSharedPreferences("focus_prefs", Context.MODE_PRIVATE)
         val isActive = prefs.getBoolean("is_active", false)
@@ -74,12 +76,45 @@ class MainActivity : AppCompatActivity() {
         val glassCard = createGlassCard()
         
         val setupTitle = TextView(this).apply {
-            text = "1. Select Apps to Block"
+            text = "1. Grant Permissions"
             setTextColor(Color.WHITE)
             textSize = 18f
-            setPadding(0, 0, 0, 20)
+            setPadding(0, 0, 0, 10)
         }
         glassCard.addView(setupTitle)
+
+        // --- RESTORED PERMISSION BUTTONS ---
+        val btnUsage = createButton("Allow Usage Access") {
+            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
+        }
+        btnUsage.setBackgroundColor(Color.parseColor("#33FFFFFF"))
+        
+        val btnOverlay = createButton("Allow Display Over Apps") {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        }
+        btnOverlay.setBackgroundColor(Color.parseColor("#33FFFFFF"))
+        
+        val btnBattery = createButton("Ignore Battery Optimization") {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !pm.isIgnoringBatteryOptimizations(packageName)) {
+                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+            } else {
+                Toast.makeText(this, "Battery already optimized!", Toast.LENGTH_SHORT).show()
+            }
+        }
+        btnBattery.setBackgroundColor(Color.parseColor("#33FFFFFF"))
+
+        glassCard.addView(btnUsage)
+        glassCard.addView(btnOverlay)
+        glassCard.addView(btnBattery)
+
+        val appTitle = TextView(this).apply {
+            text = "\n2. Select Apps to Block"
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            setPadding(0, 20, 0, 20)
+        }
+        glassCard.addView(appTitle)
 
         val blockedApps = prefs.getStringSet("blocked_apps", emptySet())?.toMutableSet() ?: mutableSetOf()
         val pm = packageManager
@@ -131,6 +166,13 @@ class MainActivity : AppCompatActivity() {
         val btnStart = createButton("START SESSION") {
             val mins = timeInput.text.toString().toLongOrNull() ?: 0L
             if (mins > 0 && blockedApps.isNotEmpty()) {
+                
+                // Ensure they actually granted the overlay permission before starting
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+                    Toast.makeText(this, "Please allow Display Over Apps first!", Toast.LENGTH_LONG).show()
+                    return@createButton
+                }
+
                 val finalP = generatePass(6)
                 val breaks = setOf(generatePass(4), generatePass(4), generatePass(4))
                 
@@ -142,19 +184,12 @@ class MainActivity : AppCompatActivity() {
                     .commit()
                     
                 startForegroundService(Intent(this, FocusService::class.java))
-                checkStateAndRender() // Instantly switch to the timer screen
+                checkStateAndRender()
             } else {
                 Toast.makeText(this, "Select apps and enter time!", Toast.LENGTH_SHORT).show()
             }
         }
         glassCard.addView(btnStart)
-        
-        val btnPerms = createButton("Fix Permissions") {
-            startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
-        }
-        btnPerms.setBackgroundColor(Color.TRANSPARENT)
-        btnPerms.setTextColor(Color.parseColor("#0A84FF"))
-        glassCard.addView(btnPerms)
 
         contentLayout.addView(glassCard)
     }
@@ -187,7 +222,6 @@ class MainActivity : AppCompatActivity() {
         glassCard.addView(statusView)
         contentLayout.addView(glassCard)
 
-        // SAFE LOOP: ONLY updates the timer text. Does not destroy the screen!
         handler.post(object : Runnable {
             override fun run() {
                 val endTime = prefs.getLong("end_time", 0L)
@@ -201,7 +235,7 @@ class MainActivity : AppCompatActivity() {
                     timerView.text = String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, mins, secs)
                     handler.postDelayed(this, 1000)
                 } else {
-                    checkStateAndRender() // Timer finished, show the final password screen
+                    checkStateAndRender()
                 }
             }
         })
