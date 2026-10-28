@@ -1,42 +1,33 @@
 name: Build Android App
 on: [push, workflow_dispatch]
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
-
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-
       - name: Setup Gradle 8.5
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.5'
-
-      - name: Prepare Folders & AndroidX Config
+      - name: Prepare Folders
         run: |
           echo "android.useAndroidX=true" > gradle.properties
-          echo "org.gradle.jvmargs=-Xmx2048m" >> gradle.properties
-          mkdir -p app/src/main/res/xml
-          mkdir -p app/src/main/java/com/myblocker/app
+          mkdir -p app/src/main/java/com/glassy/focus
           [ -f build.gradle ] && mv build.gradle app/build.gradle || true
           [ -f AndroidManifest.xml ] && mv AndroidManifest.xml app/src/main/AndroidManifest.xml || true
-          [ -f accessibility_config.xml ] && mv accessibility_config.xml app/src/main/res/xml/accessibility_config.xml || true
-          [ -f MainActivity.kt ] && mv MainActivity.kt app/src/main/java/com/myblocker/app/MainActivity.kt || true
-          [ -f BlockerService.kt ] && mv BlockerService.kt app/src/main/java/com/myblocker/app/BlockerService.kt || true
-
+          [ -f MainActivity.kt ] && mv MainActivity.kt app/src/main/java/com/glassy/focus/MainActivity.kt || true
+          [ -f FocusService.kt ] && mv FocusService.kt app/src/main/java/com/glassy/focus/FocusService.kt || true
       - name: Build APK
-        run: gradle assembleDebug --stacktrace
-
+        run: gradle assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Blocker-App
+          name: Glassy-Focus-App
           path: app/build/outputs/apk/debug/*.apk
           
