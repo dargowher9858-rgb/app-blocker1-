@@ -12,6 +12,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.Gravity
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
@@ -83,7 +84,6 @@ class MainActivity : AppCompatActivity() {
         }
         glassCard.addView(setupTitle)
 
-        // --- RESTORED PERMISSION BUTTONS ---
         val btnUsage = createButton("Allow Usage Access") {
             startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS))
         }
@@ -123,7 +123,7 @@ class MainActivity : AppCompatActivity() {
         val safePackages = pm.queryIntentActivities(homeIntent, 0).map { it.activityInfo.packageName }.toSet() + 
                            setOf("com.glassy.focus", "com.android.settings", "com.android.systemui")
 
-        val scroll = ScrollView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 400) }
+        val scroll = ScrollView(this).apply { layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 350) }
         val listLayout = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
 
         pm.queryIntentActivities(mainIntent, 0).map { it.activityInfo.packageName }.distinct()
@@ -147,27 +147,61 @@ class MainActivity : AppCompatActivity() {
         scroll.addView(listLayout)
         glassCard.addView(scroll)
 
-        val timeInput = EditText(this).apply {
-            hint = "Focus Time (Minutes)"
-            setHintTextColor(Color.GRAY)
-            setTextColor(Color.WHITE)
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        // --- VINTAGE SCROLLABLE CLOCK ---
+        val pickerLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
             background = GradientDrawable().apply {
-                cornerRadius = 15f
+                cornerRadius = 20f
                 setColor(Color.parseColor("#33FFFFFF"))
             }
-            setPadding(40, 40, 40, 40)
+            setPadding(20, 20, 20, 20)
             val p = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
             p.setMargins(0, 40, 0, 40)
             layoutParams = p
         }
-        glassCard.addView(timeInput)
+
+        val hourPicker = NumberPicker(this).apply {
+            minValue = 0
+            maxValue = 24
+            value = 0
+            wrapSelectorWheel = true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { textColor = Color.WHITE }
+        }
+
+        val hourLabel = TextView(this).apply {
+            text = " h   "
+            setTextColor(Color.LTGRAY)
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+
+        val minPicker = NumberPicker(this).apply {
+            minValue = 0
+            maxValue = 59
+            value = 25 // Default 25 minutes
+            wrapSelectorWheel = true
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { textColor = Color.WHITE }
+        }
+
+        val minLabel = TextView(this).apply {
+            text = " m"
+            setTextColor(Color.LTGRAY)
+            textSize = 20f
+            typeface = Typeface.DEFAULT_BOLD
+        }
+
+        pickerLayout.addView(hourPicker)
+        pickerLayout.addView(hourLabel)
+        pickerLayout.addView(minPicker)
+        pickerLayout.addView(minLabel)
+        
+        glassCard.addView(pickerLayout)
 
         val btnStart = createButton("START SESSION") {
-            val mins = timeInput.text.toString().toLongOrNull() ?: 0L
+            val mins = (hourPicker.value * 60L) + minPicker.value
+            
             if (mins > 0 && blockedApps.isNotEmpty()) {
-                
-                // Ensure they actually granted the overlay permission before starting
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
                     Toast.makeText(this, "Please allow Display Over Apps first!", Toast.LENGTH_LONG).show()
                     return@createButton
@@ -186,7 +220,7 @@ class MainActivity : AppCompatActivity() {
                 startForegroundService(Intent(this, FocusService::class.java))
                 checkStateAndRender()
             } else {
-                Toast.makeText(this, "Select apps and enter time!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Select apps and scroll the timer!", Toast.LENGTH_SHORT).show()
             }
         }
         glassCard.addView(btnStart)
