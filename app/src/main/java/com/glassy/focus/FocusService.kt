@@ -15,7 +15,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.view.Gravity
 import android.view.WindowManager
-import android.widget.*
+import android.widget.* // This was the missing line that crashed your build
 
 class FocusService : Service() {
 
