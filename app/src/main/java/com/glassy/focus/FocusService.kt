@@ -15,7 +15,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.view.Gravity
 import android.view.WindowManager
-import android.widget.* // This was the missing line that crashed your build
+import android.widget.*
 
 class FocusService : Service() {
 
@@ -158,11 +158,12 @@ class FocusService : Service() {
         overlayView?.addView(input)
         overlayView?.addView(btnUnlock)
 
+        // FIXED KEYBOARD BUG: Removed FLAG_NOT_FOCUSABLE so the keyboard pops up
         val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.MATCH_PARENT,
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else WindowManager.LayoutParams.TYPE_PHONE,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
         windowManager.addView(overlayView, layoutParams)
