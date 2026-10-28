@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Handler
@@ -24,53 +25,56 @@ class FocusService : Service() {
     private lateinit var windowManager: WindowManager
     private var overlayView: LinearLayout? = null
     private val handler = Handler(Looper.getMainLooper())
-    
-    // Distracting apps to block (You can add more package names here)
-    private val blockedApps = listOf("com.instagram.android", "com.google.android.youtube", "com.facebook.katana")
-    
-    private var finalPassword = ""
-    private var breakPasswords = mutableListOf<String>()
-    private var timerEndTime = 0L
+    private lateinit var prefs: android.content.SharedPreferences
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val minutes = intent?.getLongExtra("MINUTES", 1L) ?: 1L
-        timerEndTime = System.currentTimeMillis() + (minutes * 60 * 1000)
-
-        // Generate Random Passwords
-        finalPassword = generateRandomPass(6)
-        breakPasswords.clear()
-        repeat(3) { breakPasswords.add(generateRandomPass(4)) }
-
-        createNotificationChannel()
-        val notification = Notification.Builder(this, "focus_channel")
-            .setContentTitle("Focus Session Active")
-            .setContentText("Break Passwords: ${breakPasswords.joinToString(", ")}")
+        prefs = getSharedPreferences("focus_prefs", Context.MODE_PRIVATE)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel("focus_chan", "Focus", NotificationManager.IMPORTANCE_LOW)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+        val notif = Notification.Builder(this, "focus_chan")
+            .setContentTitle("Focus Vault Active")
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
-            .setOngoing(true)
             .build()
-        startForeground(1, notification)
+        startForeground(1, notif)
 
         startMonitoring()
-        return START_NOT_STICKY
+        return START_STICKY
     }
 
     private fun startMonitoring() {
         handler.post(object : Runnable {
             override fun run() {
-                val foregroundApp = getForegroundApp()
-                
-                if (blockedApps.contains(foregroundApp) && overlayView == null) {
-                    showGlassOverlay()
-                }
-
-                // Check if timer is done
-                if (System.currentTimeMillis() >= timerEndTime) {
-                    updateNotification("Session Complete!", "Final Password: $finalPassword")
+                val isActive = prefs.getBoolean("is_active", false)
+                if (!isActive) {
+                    removeOverlay()
                     stopSelf()
                     return
                 }
 
-                handler.postDelayed(this, 2000) // Check every 2 seconds
+                val tempUnlockUntil = prefs.getLong("temp_unlock_until", 0L)
+                val currentTime = System.currentTimeMillis()
+                
+                // If on a break, do nothing
+                if (currentTime < tempUnlockUntil) {
+                    removeOverlay()
+                    handler.postDelayed(this, 2000)
+                    return
+                }
+
+                val blockedApps = prefs.getStringSet("blocked_apps", emptySet()) ?: emptySet()
+                val foregroundApp = getForegroundApp()
+                
+                if (foregroundApp.isNotEmpty() && blockedApps.contains(foregroundApp)) {
+                    if (overlayView == null) showGlassOverlay()
+                } else {
+                    // Only remove overlay if they leave the blocked app, allowing them to use safe apps
+                    removeOverlay() 
+                }
+
+                handler.postDelayed(this, 2000)
             }
         })
     }
@@ -82,63 +86,80 @@ class FocusService : Service() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(80, 80, 80, 80)
-            
-            // Glassy Dark Blur Effect
-            background = GradientDrawable().apply {
-                setColor(Color.parseColor("#E6000000")) // 90% Black
-            }
+            background = GradientDrawable().apply { setColor(Color.parseColor("#F2121212")) } // Solid frosted dark
         }
 
         val title = TextView(this).apply {
-            text = "Focus Mode Active\nTime remaining..."
-            textSize = 24f
+            text = "APP LOCKED"
+            textSize = 28f
+            typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
+            gravity = Gravity.CENTER
+            setPadding(0, 0, 0, 10)
+        }
+        
+        val endTime = prefs.getLong("end_time", 0L)
+        val breaks = prefs.getStringSet("break_passes", emptySet())?.toMutableSet() ?: mutableSetOf()
+        val finalPass = prefs.getString("final_pass", "")
+        val isTimerOver = System.currentTimeMillis() >= endTime
+
+        val subTitle = TextView(this).apply {
+            text = if (isTimerOver) "Session Complete!\nUnlock Password: $finalPass" 
+                   else "Focus session active.\nBreaks remaining: ${breaks.size}\nBreak Passwords: ${breaks.joinToString(", ")}"
+            textSize = 16f
+            setTextColor(Color.LTGRAY)
             gravity = Gravity.CENTER
             setPadding(0, 0, 0, 50)
         }
 
         val input = EditText(this).apply {
-            hint = "Enter Password..."
-            setHintTextColor(Color.LTGRAY)
+            hint = "Enter Password"
+            setHintTextColor(Color.GRAY)
             setTextColor(Color.WHITE)
-            textSize = 20f
+            gravity = Gravity.CENTER
             background = GradientDrawable().apply {
                 cornerRadius = 20f
-                setColor(Color.parseColor("#4DFFFFFF")) // Translucent glass input
-                setStroke(2, Color.WHITE)
+                setColor(Color.parseColor("#33FFFFFF"))
             }
             setPadding(40, 40, 40, 40)
         }
 
         val btnUnlock = Button(this).apply {
             text = "UNLOCK"
+            setTextColor(Color.WHITE)
             background = GradientDrawable().apply {
                 cornerRadius = 20f
-                setColor(Color.parseColor("#B3FFFFFF"))
+                setColor(Color.parseColor("#0A84FF"))
             }
+            val p = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+            p.setMargins(0, 30, 0, 0)
+            layoutParams = p
+            
             setOnClickListener {
-                val typed = input.text.toString()
-                if (typed == finalPassword) {
+                val typed = input.text.toString().uppercase()
+                
+                if (isTimerOver && typed == finalPass) {
+                    prefs.edit().putBoolean("is_active", false).apply()
                     removeOverlay()
-                    stopSelf()
-                } else if (breakPasswords.contains(typed)) {
-                    breakPasswords.remove(typed) // Consume the break password
+                } else if (!isTimerOver && breaks.contains(typed)) {
+                    breaks.remove(typed)
+                    prefs.edit()
+                        .putStringSet("break_passes", HashSet(breaks))
+                        .putLong("temp_unlock_until", System.currentTimeMillis() + (5 * 60 * 1000)) // 5 minute break
+                        .apply()
                     removeOverlay()
-                    // Re-trigger overlay check after 5 minutes (300,000 ms)
-                    handler.postDelayed({ overlayView = null }, 300000)
+                    Toast.makeText(this@FocusService, "5 Minute Break Started!", Toast.LENGTH_LONG).show()
                 } else {
                     input.setText("")
-                    input.hint = "Wrong Password!"
+                    input.hint = "Incorrect Password"
                 }
             }
         }
 
         overlayView?.addView(title)
+        overlayView?.addView(subTitle)
         overlayView?.addView(input)
-        
-        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-        params.setMargins(0, 40, 0, 0)
-        overlayView?.addView(btnUnlock, params)
+        overlayView?.addView(btnUnlock)
 
         val layoutParams = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
@@ -147,7 +168,6 @@ class FocusService : Service() {
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT
         )
-        layoutParams.flags = WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
         windowManager.addView(overlayView, layoutParams)
     }
 
@@ -161,7 +181,7 @@ class FocusService : Service() {
     private fun getForegroundApp(): String {
         val usm = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
         val time = System.currentTimeMillis()
-        val events = usm.queryEvents(time - 3000, time)
+        val events = usm.queryEvents(time - 2000, time)
         var currentApp = ""
         val event = UsageEvents.Event()
         while (events.hasNextEvent()) {
@@ -171,29 +191,6 @@ class FocusService : Service() {
             }
         }
         return currentApp
-    }
-
-    private fun generateRandomPass(length: Int): String {
-        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Removed confusing chars like 0, O, I, 1
-        return (1..length).map { chars.random() }.joinToString("")
-    }
-
-    private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel("focus_channel", "Focus Timer", NotificationManager.IMPORTANCE_LOW)
-            val manager = getSystemService(NotificationManager::class.java)
-            manager.createNotificationChannel(channel)
-        }
-    }
-
-    private fun updateNotification(title: String, text: String) {
-        val notification = Notification.Builder(this, "focus_channel")
-            .setContentTitle(title)
-            .setContentText(text)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
-            .build()
-        val manager = getSystemService(NotificationManager::class.java)
-        manager.notify(1, notification)
     }
 
     override fun onDestroy() {
