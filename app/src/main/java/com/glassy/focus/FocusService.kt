@@ -15,10 +15,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.view.Gravity
 import android.view.WindowManager
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.TextView
+import android.widget.*
 
 class FocusService : Service() {
 
