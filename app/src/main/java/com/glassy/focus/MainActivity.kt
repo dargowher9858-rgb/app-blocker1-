@@ -29,8 +29,8 @@ class MainActivity : AppCompatActivity() {
 
         val rootLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(50, 80, 50, 80)
-            setBackgroundColor(Color.parseColor("#0F0F13")) // Deep iPhone dark background
+            setPadding(40, 60, 40, 60)
+            setBackgroundColor(Color.parseColor("#0F0F13"))
         }
 
         val title = TextView(this).apply {
@@ -38,15 +38,24 @@ class MainActivity : AppCompatActivity() {
             textSize = 32f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(Color.WHITE)
-            setPadding(20, 0, 0, 40)
+            setPadding(10, 0, 0, 30)
         }
         rootLayout.addView(title)
+
+        // Make the main interface scrollable so buttons never cut off
+        val mainScroll = ScrollView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT
+            )
+        }
 
         contentLayout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        rootLayout.addView(contentLayout)
-
+        
+        mainScroll.addView(contentLayout)
+        rootLayout.addView(mainScroll)
         setContentView(rootLayout)
     }
 
@@ -147,7 +156,15 @@ class MainActivity : AppCompatActivity() {
         scroll.addView(listLayout)
         glassCard.addView(scroll)
 
-        // --- VINTAGE SCROLLABLE CLOCK ---
+        val clockTitle = TextView(this).apply {
+            text = "\n3. Select Focus Duration"
+            setTextColor(Color.WHITE)
+            textSize = 18f
+            setPadding(0, 10, 0, 10)
+        }
+        glassCard.addView(clockTitle)
+
+        // --- VINTAGE SCROLLABLE CLOCK WHEELS ---
         val pickerLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER
@@ -155,9 +172,9 @@ class MainActivity : AppCompatActivity() {
                 cornerRadius = 20f
                 setColor(Color.parseColor("#33FFFFFF"))
             }
-            setPadding(20, 20, 20, 20)
+            setPadding(10, 10, 10, 10)
             val p = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            p.setMargins(0, 40, 0, 40)
+            p.setMargins(0, 10, 0, 30)
             layoutParams = p
         }
 
@@ -170,25 +187,23 @@ class MainActivity : AppCompatActivity() {
         }
 
         val hourLabel = TextView(this).apply {
-            text = " h   "
+            text = "h  "
             setTextColor(Color.LTGRAY)
-            textSize = 20f
-            typeface = Typeface.DEFAULT_BOLD
+            textSize = 18f
         }
 
         val minPicker = NumberPicker(this).apply {
             minValue = 0
             maxValue = 59
-            value = 25 // Default 25 minutes
+            value = 1 // Default 1 min for easy testing
             wrapSelectorWheel = true
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { textColor = Color.WHITE }
         }
 
         val minLabel = TextView(this).apply {
-            text = " m"
+            text = "m"
             setTextColor(Color.LTGRAY)
-            textSize = 20f
-            typeface = Typeface.DEFAULT_BOLD
+            textSize = 18f
         }
 
         pickerLayout.addView(hourPicker)
@@ -198,6 +213,7 @@ class MainActivity : AppCompatActivity() {
         
         glassCard.addView(pickerLayout)
 
+        // --- PROMINENT START BUTTON ---
         val btnStart = createButton("START SESSION") {
             val mins = (hourPicker.value * 60L) + minPicker.value
             
@@ -220,9 +236,11 @@ class MainActivity : AppCompatActivity() {
                 startForegroundService(Intent(this, FocusService::class.java))
                 checkStateAndRender()
             } else {
-                Toast.makeText(this, "Select apps and scroll the timer!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Select apps and scroll the timer wheels!", Toast.LENGTH_SHORT).show()
             }
         }
+        btnStart.setBackgroundColor(Color.parseColor("#32D74B")) // Bright green for visibility
+        btnStart.textSize = 18f
         glassCard.addView(btnStart)
 
         contentLayout.addView(glassCard)
@@ -304,6 +322,7 @@ class MainActivity : AppCompatActivity() {
             stopService(Intent(this, FocusService::class.java))
             checkStateAndRender()
         }
+        btnEnd.setBackgroundColor(Color.parseColor("#FF453A"))
         
         glassCard.addView(statusLabel)
         glassCard.addView(timerView)
@@ -316,7 +335,7 @@ class MainActivity : AppCompatActivity() {
     private fun createGlassCard(): LinearLayout {
         return LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(50, 50, 50, 50)
+            setPadding(40, 40, 40, 40)
             background = GradientDrawable().apply {
                 cornerRadius = 40f
                 setColor(Color.parseColor("#1AFFFFFF")) 
@@ -335,7 +354,7 @@ class MainActivity : AppCompatActivity() {
                 setColor(Color.parseColor("#0A84FF"))
             }
             val p = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
-            p.setMargins(0, 20, 0, 0)
+            p.setMargins(0, 15, 0, 15)
             layoutParams = p
             setOnClickListener { onClick() }
         }
